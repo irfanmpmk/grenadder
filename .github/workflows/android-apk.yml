@@ -1,0 +1,72 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: ["claude/hopeful-bohr-rfo2wr", "main"]
+    paths: ["www/**", "assets/**", "capacitor.config.json", "package.json", "android-config/**", ".github/workflows/android-apk.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Android project
+        run: |
+          npx cap add android
+          npm run assets
+          npx cap sync android
+          # Increase versionCode every build so phones accept the APK as an update.
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
+          # Use the committed debug key so every build has the same signature.
+          mkdir -p ~/.android
+          cp android-config/debug.keystore ~/.android/debug.keystore
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk Grenadder.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Grenadder-apk
+          path: Grenadder.apk
+
+      - name: Publish to the "Latest APK" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: Grenadder APK (latest)
+          prerelease: false
+          make_latest: true
+          files: Grenadder.apk
+          body: |
+            Grenadder for Android, build 1.0.${{ github.run_number }}.
+
+            **Install:** download `Grenadder.apk` on your Android phone, open it, and allow
+            "Install unknown apps" for your browser or WhatsApp when asked.

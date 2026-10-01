@@ -52,6 +52,15 @@ npm install
 npm start          # http://localhost:8080
 ```
 
+## Download the Android APK
+
+https://github.com/irfanmpmk/grenadder/releases/latest/download/Grenadder.apk
+
+Built by `.github/workflows/android-apk.yml` on every push. It's a debug-signed APK for sharing
+directly (not the Play Store). `android-config/debug.keystore` is a throwaway debug key (password
+`android`), so every build has the same signature and installs as an update over the previous one.
+Use a separate, private release key if you later publish to the Play Store.
+
 ## Build for Android
 
 Requires Android Studio (JDK 21 + Android SDK).
