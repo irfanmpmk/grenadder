@@ -40,6 +40,11 @@ assets/                   source icon & splash for @capacitor/assets
 - Native haptics via `@capacitor/haptics`; Android back button and app pause via `@capacitor/app`
 - High score and mute setting persisted locally
 
+## Play online
+
+https://irfanmpmk.github.io/grenadder/ (deployed from `www/` by `.github/workflows/pages.yml`
+on every push; requires Settings → Pages → Source: **GitHub Actions**).
+
 ## Run in a browser
 
 ```bash
