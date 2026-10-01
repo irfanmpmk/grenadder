@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f1e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Grenadder</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.webp" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="safe" aria-hidden="true"></div>
+
+  <header id="hud" class="hidden">
+    <div class="hud-left">
+      <div id="score" class="score">0</div>
+      <div id="combo" class="combo"></div>
+    </div>
+    <div class="hud-mid">
+      <div id="wave" class="wave">WAVE 1</div>
+      <div id="ammo" class="ammo" aria-label="Grenades"></div>
+    </div>
+    <div class="hud-right">
+      <button id="btn-pause" class="icon-btn" aria-label="Pause">&#10074;&#10074;</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner"></div>
+
+  <section id="menu" class="overlay">
+    <div class="panel">
+      <h1 class="logo">GREN<span>ADDER</span></h1>
+      <p class="tag">A snake. With grenades.</p>
+      <button id="btn-play" class="btn primary">PLAY</button>
+      <div class="best">BEST <b id="menu-best">0</b></div>
+      <ul class="howto">
+        <li><b>Drag</b> anywhere to steer</li>
+        <li><b>Tap</b> to throw a grenade</li>
+        <li>Eat <i class="dot orb"></i> to grow, grab <i class="dot nade"></i> for ammo</li>
+        <li>Chain explosions for combos. Don't bite yourself!</li>
+      </ul>
+      <p class="keys">Keyboard: Arrows / WASD + Space</p>
+      <button id="btn-mute" class="btn small ghost">SOUND: ON</button>
+    </div>
+  </section>
+
+  <section id="pause" class="overlay hidden">
+    <div class="panel">
+      <h2>PAUSED</h2>
+      <button id="btn-resume" class="btn primary">RESUME</button>
+      <button id="btn-restart" class="btn">RESTART</button>
+      <button id="btn-menu" class="btn ghost">MENU</button>
+    </div>
+  </section>
+
+  <section id="over" class="overlay hidden">
+    <div class="panel">
+      <h2>GAME OVER</h2>
+      <div class="final" id="over-score">0</div>
+      <div id="over-new" class="new-best hidden">NEW BEST!</div>
+      <div class="stats" id="over-stats"></div>
+      <div class="best">BEST <b id="over-best">0</b></div>
+      <button id="btn-retry" class="btn primary">PLAY AGAIN</button>
+      <button id="btn-over-menu" class="btn ghost">MENU</button>
+    </div>
+  </section>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

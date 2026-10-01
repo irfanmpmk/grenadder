@@ -1,0 +1,13 @@
+{
+  "appId": "com.grenadder.game",
+  "appName": "Grenadder",
+  "webDir": "www",
+  "backgroundColor": "#0b0f1e",
+  "android": {
+    "backgroundColor": "#0b0f1e"
+  },
+  "ios": {
+    "backgroundColor": "#0b0f1e",
+    "contentInset": "never"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "grenadder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Grenadder - a 2D arcade snake game with grenades, for Android and iOS.",
+  "scripts": {
+    "start": "http-server www -p 8080 -c-1",
+    "add:android": "cap add android",
+    "add:ios": "cap add ios",
+    "assets": "capacitor-assets generate --android --ios --iconBackgroundColor '#0b0f1e' --splashBackgroundColor '#0b0f1e'",
+    "sync": "cap sync",
+    "android": "cap sync android && cap run android",
+    "ios": "cap sync ios && cap run ios",
+    "open:android": "cap open android",
+    "open:ios": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/haptics": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "http-server": "^14.1.1"
+  }
+}

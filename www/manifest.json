@@ -1,0 +1,12 @@
+{
+  "name": "Grenadder",
+  "short_name": "Grenadder",
+  "start_url": "./",
+  "display": "fullscreen",
+  "background_color": "#0b0f1e",
+  "theme_color": "#0b0f1e",
+  "icons": [
+    { "src": "icons/icon-192.webp", "type": "image/webp", "sizes": "192x192", "purpose": "any maskable" },
+    { "src": "icons/icon-512.webp", "type": "image/webp", "sizes": "512x512", "purpose": "any maskable" }
+  ]
+}
