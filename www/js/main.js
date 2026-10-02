@@ -1,4 +1,4 @@
-import { Game, DIFFICULTY, MODES } from './game.js';
+import { Game, DIFFICULTY, MODES, POWERS } from './game.js';
 import { Input } from './input.js';
 import { initAudio, sfx, isMuted, setMuted } from './audio.js';
 
@@ -24,7 +24,7 @@ const settings = {
 };
 
 const ui = {
-  hud: $('hud'), score: $('score'), combo: $('combo'), wave: $('wave'), ammo: $('ammo'), banner: $('banner'),
+  hud: $('hud'), score: $('score'), combo: $('combo'), powers: $('powers'), wave: $('wave'), ammo: $('ammo'), banner: $('banner'),
   menu: $('menu'), pause: $('pause'), over: $('over'),
 };
 
@@ -34,6 +34,7 @@ let bg = null;
 
 const game = new Game({
   onWave(n) { showBanner(`WAVE ${n}`); },
+  onBanner(text) { showBanner(text); lastWave = ''; },
   onCombo(c) {
     if (c < 2) return;
     ui.combo.classList.remove('pop');
@@ -52,7 +53,7 @@ const game = new Game({
     $('over-best').textContent = best.toLocaleString();
     $('over-new').classList.toggle('hidden', !isBest || sum.score === 0);
     $('over-stats').innerHTML =
-      `Wave ${sum.wave} &middot; ${sum.kills} kills &middot; best combo x${sum.bestCombo}<br>` +
+      `${sum.mode === 'maze' ? 'Maze level' : 'Wave'} ${sum.wave} &middot; ${sum.kills} kills &middot; best combo x${sum.bestCombo}<br>` +
       `Length ${sum.length} &middot; ${Math.floor(sum.time)}s survived`;
     ui.hud.classList.add('hidden');
     show(ui.over);
@@ -122,9 +123,10 @@ function startGame() {
   input.reset();
   game.reset(settings);
   lastAmmo = -1;
-  lastWave = -1;
+  lastWave = '';
+  lastPowers = '';
   lastScore = -1;
-  showBanner('WAVE 1');
+  showBanner(settings.mode === 'maze' ? 'MAZE 1' : 'WAVE 1');
 }
 
 function toMenu() {
@@ -160,14 +162,19 @@ function showBanner(text) {
 function describe(d) {
   return `${d.startAmmo} grenades to start (max ${d.maxAmmo}), refills every ${d.pickupEvery[0]}-${d.pickupEvery[1]}s. ` +
     `${d.enemyCap < 1 ? 'Fewer, slower' : d.enemyCap > 1 ? 'More, faster' : 'Standard'} bugs, ` +
-    `${d.blastR > 3.2 ? 'bigger' : d.blastR < 3.2 ? 'smaller' : 'normal'} blasts. Score x${d.scoreMult}.`;
+    `${d.blastR > 3.2 ? 'bigger' : d.blastR < 3.2 ? 'smaller' : 'normal'} blasts. ` +
+    `${d.selfBite ? 'Biting yourself is deadly.' : 'You can cross your own body.'} Score x${d.scoreMult}.`;
 }
 
 function syncSettings() {
   for (const [id, key] of [['seg-mode', 'mode'], ['seg-diff', 'difficulty']]) {
     for (const b of $(id).querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.v === settings[key]));
   }
-  const modeText = settings.mode === 'walls' ? 'Walls block you and the bugs. Blow up crates for loot. ' : '';
+  const modeText = {
+    classic: '',
+    walls: 'Walls kill on contact and block bugs. Blow up crates for loot. ',
+    maze: 'Slide through the maze and collect every star to clear the level. Walls are safe to touch. ',
+  }[settings.mode];
   $('opt-desc').textContent = modeText + describe(DIFFICULTY[settings.difficulty]);
   $('menu-best').textContent = getBest().toLocaleString();
 }
@@ -210,7 +217,7 @@ Cap?.Plugins?.App?.addListener('backButton', () => {
 Cap?.Plugins?.App?.addListener('pause', () => togglePause(true));
 
 // -------------------------------------------------------------------- HUD
-let lastAmmo = -1, lastScore = -1, lastWave = -1, lastCombo = -1;
+let lastAmmo = -1, lastScore = -1, lastWave = '', lastCombo = -1, lastPowers = '';
 function updateHud() {
   if (game.state !== 'play' && game.state !== 'dying') return;
   if (game.score !== lastScore) {
@@ -223,9 +230,15 @@ function updateHud() {
     for (let i = 0; i < game.diff.maxAmmo; i++) html += `<i class="${i < game.ammo ? '' : 'empty'}"></i>`;
     ui.ammo.innerHTML = html;
   }
-  if (game.wave !== lastWave) {
-    lastWave = game.wave;
-    ui.wave.textContent = `WAVE ${game.wave} · ${game.diff.label.toUpperCase()}`;
+  const label = game.hudLabel();
+  if (label !== lastWave) {
+    lastWave = label;
+    ui.wave.textContent = label;
+  }
+  const powers = game.activePowers().map((p) => `<span style="background:${POWERS[p.type].color}">${POWERS[p.type].label} ${Math.ceil(p.left)}</span>`).join('');
+  if (powers !== lastPowers) {
+    lastPowers = powers;
+    ui.powers.innerHTML = powers;
   }
   const c = game.combo >= 2 ? game.combo : 0;
   if (c !== lastCombo) {

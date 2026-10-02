@@ -8,14 +8,25 @@ and the bugs keep coming.
 - Eat pink orbs to grow, grab green grenades for ammo
 - Grenades caught in a blast cook off → **chain reactions** and **combo multipliers** (up to x10)
 - Your body is a wall: enemies can't cross it, so you can shield yourself and herd them
-- Don't hit the walls or bite your own tail
+- Don't hit the walls. Biting your own body is only deadly on Hard
 
 ### Modes
 
 - **Classic**: open arena.
 - **Walls**: one of four wall layouts (Pillars, Bars, Rooms, Corners) plus breakable crates.
-  Walls kill the snake and block bugs, which path around them. Blow up crates for points,
-  gems and grenades. More crates appear each wave.
+  Walls kill the snake and block bugs. Fewer bugs than Classic, and they only chase you when
+  you're close; otherwise they wander. Blow up crates for points, gems and grenades.
+- **Maze**: a random maze with lots of openings. Walls are safe: the snake slides along them.
+  Collect every gold star (an arrow points to the nearest one) to clear the level and get a
+  new, bigger maze with more stars. Bugs move through the corridors.
+
+### Power-ups
+
+Appear in every mode, most often in Maze. They last 10 / 8 / 6 seconds on Easy / Normal / Hard.
+
+- **Shield** (blue): bugs that touch your head die, and walls can't hurt you.
+- **Blaster** (orange): the snake fires forward automatically. Bullets also break crates.
+- **Freeze** (ice): every bug stops moving; ram them to shatter them.
 
 ### Difficulty
 
@@ -29,6 +40,7 @@ and the bugs keep coming.
 | Wave length | 28 s | 22 s | 18 s |
 | Dashers / Brutes from wave | 3 / 6 | 2 / 4 | 1 / 3 |
 | Brute HP | 2 | 3 | 4 |
+| Biting yourself kills | no | no | yes |
 | Score multiplier | x0.5 | x1 | x2 |
 
 Each mode + difficulty keeps its own best score. All values live in `DIFFICULTY` in `www/js/game.js`.

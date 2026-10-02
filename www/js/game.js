@@ -28,23 +28,32 @@ export const DIFFICULTY = {
   easy: {
     label: 'Easy', startAmmo: 5, maxAmmo: 8, pickupEvery: [3, 4.5], maxPickups: 3, starveDelay: 1,
     enemyCap: 0.6, spawnRate: 0.65, enemySpeed: 0.8, snakeSpeed: 0.92, blastR: 3.8, waveTime: 28,
-    dasherWave: 3, bruteWave: 6, bruteHp: 2, dropChance: 0.12, crateDrop: 0.45, scoreMult: 0.5,
+    dasherWave: 3, bruteWave: 6, bruteHp: 2, dropChance: 0.12, crateDrop: 0.45, scoreMult: 0.5, selfBite: false, powerTime: 10,
   },
   normal: {
     label: 'Normal', startAmmo: 3, maxAmmo: 5, pickupEvery: [4.5, 7], maxPickups: 2, starveDelay: 1.5,
     enemyCap: 1, spawnRate: 1, enemySpeed: 1, snakeSpeed: 1, blastR: 3.2, waveTime: 22,
-    dasherWave: 2, bruteWave: 4, bruteHp: 3, dropChance: 0.06, crateDrop: 0.3, scoreMult: 1,
+    dasherWave: 2, bruteWave: 4, bruteHp: 3, dropChance: 0.06, crateDrop: 0.3, scoreMult: 1, selfBite: false, powerTime: 8,
   },
   hard: {
     label: 'Hard', startAmmo: 2, maxAmmo: 4, pickupEvery: [7, 10], maxPickups: 1, starveDelay: 3,
     enemyCap: 1.4, spawnRate: 1.45, enemySpeed: 1.2, snakeSpeed: 1.08, blastR: 2.8, waveTime: 18,
-    dasherWave: 1, bruteWave: 3, bruteHp: 4, dropChance: 0.03, crateDrop: 0.18, scoreMult: 2,
+    dasherWave: 1, bruteWave: 3, bruteHp: 4, dropChance: 0.03, crateDrop: 0.18, scoreMult: 2, selfBite: true, powerTime: 6,
   },
 };
 
+// Per-mode tuning, multiplied on top of the difficulty settings.
+// aggro: how many grid steps away (around walls) a bug notices you; beyond that it wanders.
 export const MODES = {
-  classic: { label: 'Classic' },
-  walls: { label: 'Walls' },
+  classic: { label: 'Classic', enemyCap: 1, spawnRate: 1, enemySpeed: 1, aggro: Infinity, snakeSpeed: 1, turn: 1, wallsKill: true, powerEvery: [16, 24] },
+  walls: { label: 'Walls', enemyCap: 0.55, spawnRate: 0.6, enemySpeed: 0.85, aggro: 13, snakeSpeed: 1, turn: 1.1, wallsKill: true, powerEvery: [13, 19] },
+  maze: { label: 'Maze', enemyCap: 0.5, spawnRate: 0.55, enemySpeed: 0.8, aggro: 9, snakeSpeed: 0.85, turn: 1.5, wallsKill: false, powerEvery: [8, 12] },
+};
+
+export const POWERS = {
+  shield: { label: 'SHIELD', color: '#4cc9ff' },
+  blaster: { label: 'BLASTER', color: '#ff9f1c' },
+  freeze: { label: 'FREEZE', color: '#bde0fe' },
 };
 
 const ENEMY = {
@@ -110,6 +119,38 @@ const LAYOUTS = [
     v: [[0.12, 0.14, 0.3], [0.88, 0.14, 0.3], [0.12, 0.7, 0.86], [0.88, 0.7, 0.86]],
   },
 ];
+
+// Braided maze: a recursive-backtracker maze with extra walls knocked out,
+// so there are loops and plenty of openings. Returns wall rects in arena units.
+function generateMaze(W, H) {
+  const cols = Math.max(3, Math.round(W / 3.6)), rows = Math.max(3, Math.round(H / 3.6));
+  const cw = W / cols, ch = H / rows, t = 0.5;
+  const vWall = Array.from({ length: rows }, () => new Array(cols - 1).fill(true)); // between (c,r) and (c+1,r)
+  const hWall = Array.from({ length: rows - 1 }, () => new Array(cols).fill(true)); // between (c,r) and (c,r+1)
+  const seen = Array.from({ length: rows }, () => new Array(cols).fill(false));
+  const stack = [[Math.floor(Math.random() * cols), Math.floor(Math.random() * rows)]];
+  seen[stack[0][1]][stack[0][0]] = true;
+  while (stack.length) {
+    const [c, r] = stack[stack.length - 1];
+    const next = [[c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]].filter(([x, y]) => x >= 0 && y >= 0 && x < cols && y < rows && !seen[y][x]);
+    if (!next.length) { stack.pop(); continue; }
+    const [nc, nr] = next[Math.floor(Math.random() * next.length)];
+    if (nc !== c) vWall[r][Math.min(c, nc)] = false; else hWall[Math.min(r, nr)][c] = false;
+    seen[nr][nc] = true;
+    stack.push([nc, nr]);
+  }
+  // Knock out extra walls: these are the "doors" that make it escapable.
+  for (const row of vWall) for (let i = 0; i < row.length; i++) if (row[i] && Math.random() < 0.32) row[i] = false;
+  for (const row of hWall) for (let i = 0; i < row.length; i++) if (row[i] && Math.random() < 0.32) row[i] = false;
+  const walls = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols - 1; c++) {
+    if (vWall[r][c]) walls.push({ x: (c + 1) * cw - t / 2, y: r * ch - (r ? t / 2 : 0), w: t, h: ch + (r ? t / 2 : 0) + (r < rows - 1 ? t / 2 : 0) });
+  }
+  for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols; c++) {
+    if (hWall[r][c]) walls.push({ x: c * cw - (c ? t / 2 : 0), y: (r + 1) * ch - t / 2, w: cw + (c ? t / 2 : 0) + (c < cols - 1 ? t / 2 : 0), h: t });
+  }
+  return { walls, cols, rows, cw, ch, vWall, hWall };
+}
 
 // Pre-rendered radial glow sprites: much cheaper than shadowBlur on mobile GPUs.
 const glowCache = new Map();
@@ -207,7 +248,10 @@ export class Game {
         s.updateSegs();
       }
       for (const list of [this.enemies, this.foods, this.pickups, this.bombs, this.warns]) list.forEach((o) => keepIn(o));
-      if (this.mode === 'walls') {
+      if (this.mode === 'maze' && this.state === 'play') {
+        // A maze can't be stretched to a new shape; build a fresh one for this level.
+        this.startMazeLevel();
+      } else if (this.mode === 'walls') {
         // Rotation mid-game: rescale the layout and give the player a moment.
         this.buildWalls();
         this.crates = this.crates.filter((c) => c.x + c.w < W && c.y + c.h < H && !this.walls.some((w) => overlaps(c, w)));
@@ -347,6 +391,7 @@ export class Game {
 
   reset({ mode = 'classic', difficulty = 'normal' } = {}) {
     this.mode = MODES[mode] ? mode : 'classic';
+    this.modeCfg = MODES[this.mode];
     this.difficulty = DIFFICULTY[difficulty] ? difficulty : 'normal';
     this.diff = DIFFICULTY[this.difficulty];
     this.time = 0;
@@ -363,6 +408,13 @@ export class Game {
     this.obstacles = [];
     this.flow = null;
     this.flowT = 0;
+    this.power = { shield: 0, blaster: 0, freeze: 0 };
+    this.powerups = [];
+    this.bullets = [];
+    this.fireT = 0;
+    this.powerT = rand(...this.modeCfg.powerEvery) * 0.6;
+    this.stars = [];
+    this.starsTotal = 0;
     let start = [0.5, 0.62, -Math.PI / 2];
     if (this.mode === 'walls') {
       this.layout = LAYOUTS[Math.floor(Math.random() * LAYOUTS.length)];
@@ -388,13 +440,88 @@ export class Game {
     this.deathT = 0;
     for (let i = 0; i < this.foodTarget(); i++) this.spawnFood('orb');
     if (this.mode === 'walls') this.addCrates(this.crateTarget());
+    if (this.mode === 'maze') this.startMazeLevel();
     this.state = 'play';
+  }
+
+  // Build a new maze for the current level, place the snake and the stars to collect.
+  startMazeLevel() {
+    const m = this.maze = generateMaze(this.W, this.H);
+    this.walls = m.walls;
+    this.crates = [];
+    this.rebuildObstacles();
+    this.flow = null;
+    this.flowT = 0;
+
+    const c = Math.floor(m.cols / 2), r = m.rows - 1;
+    const dirs = [];
+    if (r > 0 && !m.hWall[r - 1][c]) dirs.push(-Math.PI / 2);
+    if (c > 0 && !m.vWall[r][c - 1]) dirs.push(Math.PI);
+    if (c < m.cols - 1 && !m.vWall[r][c]) dirs.push(0);
+    const len = this.snake ? this.snake.len : CFG.startLen;
+    const sx = (c + 0.5) * m.cw, sy = (r + 0.5) * m.ch;
+    this.snake = new Snake(sx, sy, dirs[0] ?? -Math.PI / 2);
+    // Coil the body up at the start point; it unrolls as the snake moves.
+    this.snake.path = [{ x: sx, y: sy }];
+    this.snake.len = len;
+    this.snake.updateSegs();
+    this.grace = 1.5;
+
+    for (const e of this.enemies) this.burst(e.x, e.y, ENEMY[e.type].color, 8, 4);
+    this.enemies = [];
+    this.warns = [];
+    this.bombs = [];
+    this.bullets = [];
+    this.powerups = [];
+    this.foods = this.foods.filter((f) => !this.blocked(f.x, f.y, 0.6));
+    this.pickups = this.pickups.filter((p) => !this.blocked(p.x, p.y, 0.6));
+    this.spawnT = 2.5;
+
+    // Stars go in distinct cells, away from the start cell.
+    const cells = [];
+    for (let y = 0; y < m.rows; y++) for (let x = 0; x < m.cols; x++) if (Math.abs(x - c) + Math.abs(y - r) >= 2) cells.push([x, y]);
+    for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+    this.starsTotal = Math.min(3 + this.wave, 8, cells.length);
+    this.stars = cells.slice(0, this.starsTotal).map(([x, y]) => ({ x: (x + 0.5) * m.cw, y: (y + 0.5) * m.ch, t: 0, ph: rand(0, TAU) }));
+  }
+
+  levelClear() {
+    const bonus = 500 * this.wave;
+    this.addScore(bonus, this.snake.x, this.snake.y - 1.5, '#ffd166', ' LEVEL BONUS');
+    this.wave++;
+    this.hooks.onBanner?.(`MAZE ${this.wave}`);
+    sfx.wave();
+    buzz(60);
+    this.flash = 0.4;
+    this.startMazeLevel();
+  }
+
+  hudLabel() {
+    if (this.mode === 'maze') return `MAZE ${this.wave} · ★ ${this.starsTotal - this.stars.length}/${this.starsTotal}`;
+    return `WAVE ${this.wave} · ${this.diff.label.toUpperCase()}`;
+  }
+
+  spawnPower() {
+    const types = Object.keys(POWERS);
+    const type = types[Math.floor(Math.random() * types.length)];
+    const p = this.freeSpot(4);
+    this.powerups.push({ x: p.x, y: p.y, type, t: 0, life: 14, ph: rand(0, TAU) });
+  }
+
+  activePowers() {
+    return Object.keys(POWERS).filter((k) => this.power[k] > 0).map((k) => ({ type: k, left: this.power[k] }));
+  }
+
+  flowDist(x, y) {
+    const f = this.flow;
+    if (!f) return -1;
+    return f.dist[clamp(Math.floor(y), 0, f.gh - 1) * f.gw + clamp(Math.floor(x), 0, f.gw - 1)];
   }
 
   foodTarget() { return 3 + Math.floor((this.W * this.H) / 220); }
   crateTarget() { return 4 + Math.floor((this.W * this.H) / 160); }
-  maxEnemies() { return Math.round(Math.min(10 + this.wave * 3, 45) * this.diff.enemyCap); }
-  speed() { return (CFG.baseSpeed + Math.min(this.wave - 1, 8) * 0.22) * this.diff.snakeSpeed; }
+  maxEnemies() { return Math.max(3, Math.round(Math.min(10 + this.wave * 3, 45) * this.diff.enemyCap * this.modeCfg.enemyCap)); }
+  speed() { return (CFG.baseSpeed + Math.min(this.wave - 1, 8) * 0.22) * this.diff.snakeSpeed * this.modeCfg.snakeSpeed; }
 
   // ---------------------------------------------------------------- spawning
   freeSpot(minHead = 4, margin = 1.2) {
@@ -432,7 +559,7 @@ export class Game {
       const m = 1.2;
       x = edge === 0 ? m : edge === 1 ? this.W - m : rand(m, this.W - m);
       y = edge === 2 ? m : edge === 3 ? this.H - m : rand(m, this.H - m);
-      if (d2(x, y, s.x, s.y) > 36 && !this.blocked(x, y, 1.1)) break;
+      if (d2(x, y, s.x, s.y) > (this.obstacles.length ? 81 : 36) && !this.blocked(x, y, 1.1)) break;
     }
     const r = Math.random();
     let type = 'crawler';
@@ -445,7 +572,7 @@ export class Game {
     const def = ENEMY[w.type];
     this.enemies.push({
       type: w.type, x: w.x, y: w.y, r: def.r, hp: w.type === 'brute' ? this.diff.bruteHp : def.hp, angle: Math.atan2(this.snake.y - w.y, this.snake.x - w.x),
-      vx: 0, vy: 0, t: rand(0, 10), hitT: 0, mode: 'walk', modeT: 0, cool: rand(1, 2.5), dead: false,
+      vx: 0, vy: 0, t: rand(0, 10), hitT: 0, mode: 'walk', modeT: 0, cool: rand(1, 2.5), dead: false, wander: false, seed: rand(0, 100),
     });
     this.burst(w.x, w.y, def.color, 10, 4);
     sfx.spawn();
@@ -472,7 +599,8 @@ export class Game {
     }
 
     this.time += dt;
-    const wave = 1 + Math.floor(this.time / this.diff.waveTime);
+    for (const k in this.power) if (this.power[k] > 0) this.power[k] = Math.max(0, this.power[k] - dt);
+    const wave = this.mode === 'maze' ? this.wave : 1 + Math.floor(this.time / this.diff.waveTime);
     if (wave > this.wave) {
       this.wave = wave;
       this.hooks.onWave?.(wave);
@@ -488,6 +616,7 @@ export class Game {
       if (this.flowT <= 0) { this.updateFlow(); this.flowT = 0.2; }
     }
     this.updateBombs(dt);
+    this.updateBullets(dt);
     this.updateEnemies(dt);
     if (this.state !== 'play') return;
     this.updateSpawns(dt);
@@ -503,25 +632,49 @@ export class Game {
     const s = this.snake;
     const a = input.angle;
     if (a !== null) s.target = a;
-    const turn = CFG.turnRate * dt;
+    const turn = CFG.turnRate * this.modeCfg.turn * dt;
     s.angle += clamp(angleDiff(s.angle, s.target), -turn, turn);
     const v = this.speed();
     s.x += Math.cos(s.angle) * v * dt;
     s.y += Math.sin(s.angle) * v * dt;
+
+    // Maze walls (and anything while shielded) just stop the snake: it slides along them.
+    const shielded = this.power.shield > 0;
+    const soft = !this.modeCfg.wallsKill || shielded || this.grace > 0;
+    const wr = CFG.headR * 0.7;
+    if (s.x < wr || s.y < wr || s.x > this.W - wr || s.y > this.H - wr) {
+      if (!soft) return this.die();
+      s.x = clamp(s.x, wr, this.W - wr);
+      s.y = clamp(s.y, wr, this.H - wr);
+    }
+    if (this.obstacles.length) {
+      if (soft) for (const b of this.obstacles) pushOut(s, CFG.headR * 0.65, b);
+      else if (this.blocked(s.x, s.y, CFG.headR * 0.65)) return this.die();
+    }
     s.path.unshift({ x: s.x, y: s.y });
     s.updateSegs();
+    if (this.grace > 0) this.grace -= dt;
 
     const req = input.consumeThrow();
     if (req) this.throwBomb(req);
 
-    const wr = CFG.headR * 0.7;
-    if (s.x < wr || s.y < wr || s.x > this.W - wr || s.y > this.H - wr) return this.die();
-    if (this.grace > 0) this.grace -= dt;
-    else if (this.blocked(s.x, s.y, CFG.headR * 0.65)) return this.die();
-    const hitR = (CFG.headR + CFG.bodyR) * 0.75;
-    for (let i = 5; i < s.segs.length; i++) {
-      const g = s.segs[i];
-      if (d2(s.x, s.y, g.x, g.y) < hitR * hitR) return this.die();
+    // Biting your own body only counts on Hard.
+    if (this.diff.selfBite && !shielded && this.grace <= 0) {
+      const hitR = (CFG.headR + CFG.bodyR) * 0.75;
+      for (let i = 5; i < s.segs.length; i++) {
+        const g = s.segs[i];
+        if (d2(s.x, s.y, g.x, g.y) < hitR * hitR) return this.die();
+      }
+    }
+
+    if (this.power.blaster > 0) {
+      this.fireT -= dt;
+      if (this.fireT <= 0) {
+        this.fireT = 0.16;
+        const a = s.angle + rand(-0.05, 0.05);
+        this.bullets.push({ x: s.x + Math.cos(s.angle) * 0.7, y: s.y + Math.sin(s.angle) * 0.7, vx: Math.cos(a) * 18, vy: Math.sin(a) * 18, life: 0.55 });
+        sfx.shoot();
+      }
     }
 
     for (let i = this.foods.length - 1; i >= 0; i--) {
@@ -563,6 +716,84 @@ export class Game {
         buzz(15);
       }
     }
+
+    for (let i = this.powerups.length - 1; i >= 0; i--) {
+      const p = this.powerups[i];
+      p.t += dt;
+      if (p.t > p.life) { this.powerups.splice(i, 1); continue; }
+      const r = CFG.headR + 0.6;
+      if (d2(s.x, s.y, p.x, p.y) < r * r) {
+        this.powerups.splice(i, 1);
+        this.power[p.type] = this.diff.powerTime;
+        this.text(p.x, p.y, POWERS[p.type].label + '!', POWERS[p.type].color, 1);
+        this.burst(p.x, p.y, POWERS[p.type].color, 18, 5);
+        sfx.power();
+        buzz(25);
+      }
+    }
+
+    for (let i = this.stars.length - 1; i >= 0; i--) {
+      const st = this.stars[i];
+      st.t += dt;
+      const r = CFG.headR + 0.6;
+      if (d2(s.x, s.y, st.x, st.y) < r * r) {
+        this.stars.splice(i, 1);
+        this.addScore(200, st.x, st.y, '#ffd166');
+        this.burst(st.x, st.y, '#ffd166', 22, 6);
+        sfx.gem();
+        buzz(20);
+        if (!this.stars.length) return this.levelClear();
+        this.text(st.x, st.y - 0.9, `★ ${this.starsTotal - this.stars.length}/${this.starsTotal}`, '#ffd166', 0.8);
+      }
+    }
+  }
+
+  updateBullets(dt) {
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const b = this.bullets[i];
+      b.life -= dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      let hit = b.life <= 0 || b.x < 0 || b.y < 0 || b.x > this.W || b.y > this.H;
+      if (!hit) {
+        for (const o of this.obstacles) {
+          if (o.x <= b.x && b.x <= o.x + o.w && o.y <= b.y && b.y <= o.y + o.h) {
+            hit = true;
+            this.burst(b.x, b.y, '#ff9f1c', 4, 3);
+            if (o.crate) this.breakCrate(o);
+            break;
+          }
+        }
+      }
+      if (!hit) {
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          const rr = e.r + 0.15;
+          if (d2(b.x, b.y, e.x, e.y) < rr * rr) {
+            hit = true;
+            e.hp -= 1;
+            e.hitT = 0.1;
+            e.vx += b.vx * 0.12;
+            e.vy += b.vy * 0.12;
+            if (e.hp <= 0) this.killEnemy(e); else sfx.hit();
+            break;
+          }
+        }
+      }
+      if (hit) this.bullets.splice(i, 1);
+    }
+  }
+
+  breakCrate(c) {
+    const i = this.crates.indexOf(c);
+    if (i < 0) return;
+    this.crates.splice(i, 1);
+    const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+    this.burst(cx, cy, '#ffb347', 16, 6);
+    this.addScore(50, cx, cy, '#ffb347');
+    if (Math.random() < this.diff.crateDrop) this.spawnPickup(cx, cy);
+    else this.spawnFood('gem', cx, cy);
+    this.rebuildObstacles();
   }
 
   // Throw a grenade to the tapped point (or straight ahead for keyboard play).
@@ -672,19 +903,7 @@ export class Game {
     for (const b of this.bombs) if (b.landed && b.fuse - b.t > 0.14 && d2(x, y, b.x, b.y) < R * R) b.t = b.fuse - 0.14;
 
     // Crates in the blast break open and drop loot.
-    let broke = false;
-    for (let i = this.crates.length - 1; i >= 0; i--) {
-      const c = this.crates[i];
-      if (!circleRect(x, y, R * 0.9, c)) continue;
-      this.crates.splice(i, 1);
-      broke = true;
-      const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
-      this.burst(cx, cy, '#ffb347', 16, 6);
-      this.addScore(50, cx, cy, '#ffb347');
-      if (Math.random() < this.diff.crateDrop) this.spawnPickup(cx, cy);
-      else this.spawnFood('gem', cx, cy);
-    }
-    if (broke) this.rebuildObstacles();
+    for (const c of this.crates.filter((c) => circleRect(x, y, R * 0.9, c))) this.breakCrate(c);
   }
 
   killEnemy(e) {
@@ -705,22 +924,43 @@ export class Game {
 
   updateEnemies(dt) {
     const s = this.snake;
+    const frozen = this.power.freeze > 0;
+    const shielded = this.power.shield > 0;
     for (const e of this.enemies) {
       if (e.dead) continue;
       const def = ENEMY[e.type];
-      e.t += dt;
       e.hitT -= dt;
-      const toHead = Math.atan2(s.y - e.y, s.x - e.x);
       const dist = Math.sqrt(d2(e.x, e.y, s.x, s.y));
-      let speed = (def.speed + Math.min(this.wave - 1, 10) * 0.07) * this.diff.enemySpeed;
-      // In Walls mode, follow the flow field when the head is out of sight.
+      const hr = (CFG.headR + e.r) * 0.78;
+      if (frozen) {
+        // Frozen bugs don't move; ramming one shatters it.
+        if (e.mode !== 'walk') { e.mode = 'walk'; e.cool = 1; }
+        if (dist < hr) this.killEnemy(e);
+        continue;
+      }
+      e.t += dt;
+      const toHead = Math.atan2(s.y - e.y, s.x - e.x);
+      let speed = (def.speed + Math.min(this.wave - 1, 10) * 0.07) * this.diff.enemySpeed * this.modeCfg.enemySpeed;
+      // Around walls, follow the flow field when the head is out of sight,
+      // and only chase at all when the snake is within aggro range.
       let chase = toHead, pathing = false;
-      if (this.obstacles.length && !this.lineOfSight(e.x, e.y, s.x, s.y, e.r * 0.8)) {
-        const fa = this.flowAngle(e.x, e.y);
-        if (fa !== null) { chase = fa; pathing = true; }
+      e.wander = false;
+      if (this.obstacles.length) {
+        if (this.lineOfSight(e.x, e.y, s.x, s.y, e.r * 0.8)) {
+          if (dist > this.modeCfg.aggro * 1.3) e.wander = true;
+        } else {
+          const fd = this.flowDist(e.x, e.y);
+          const fa = this.flowAngle(e.x, e.y);
+          if (fd < 0 || fd > this.modeCfg.aggro || fa === null) e.wander = true;
+          else { chase = fa; pathing = true; }
+        }
       }
 
-      if (e.type === 'dasher') {
+      if (e.wander) {
+        e.angle += Math.sin(e.t * 0.8 + e.seed) * 1.8 * dt;
+        speed *= 0.55;
+        if (e.mode !== 'walk') { e.mode = 'walk'; e.cool = 1.5; }
+      } else if (e.type === 'dasher') {
         e.cool -= dt;
         if (e.mode === 'walk') {
           e.angle += clamp(angleDiff(e.angle, chase), -(pathing ? 5 : 2) * dt, (pathing ? 5 : 2) * dt);
@@ -747,8 +987,10 @@ export class Game {
       const f = Math.pow(0.01, dt);
       e.vx *= f;
       e.vy *= f;
-      e.x = clamp(e.x, e.r, this.W - e.r);
-      e.y = clamp(e.y, e.r, this.H - e.r);
+      const cx = clamp(e.x, e.r, this.W - e.r), cy = clamp(e.y, e.r, this.H - e.r);
+      if (e.wander && (cx !== e.x || cy !== e.y)) e.angle += Math.PI * rand(0.6, 1.2);
+      e.x = cx;
+      e.y = cy;
 
       // The snake's body is a wall enemies can't pass through.
       for (let i = 2; i < s.segs.length; i++) {
@@ -763,8 +1005,12 @@ export class Game {
         }
       }
 
-      const hr = (CFG.headR + e.r) * 0.78;
-      if (dist < hr) return this.die();
+      if (dist < hr) {
+        if (shielded) {
+          this.killEnemy(e);
+          this.shake = Math.min(1, this.shake + 0.3);
+        } else if (this.grace <= 0) return this.die();
+      }
     }
 
     // Soft separation so swarms spread out instead of stacking.
@@ -787,7 +1033,9 @@ export class Game {
     if (this.obstacles.length) {
       for (const e of es) {
         for (const b of this.obstacles) {
-          if (pushOut(e, e.r, b) && e.mode === 'dash') { e.mode = 'walk'; e.cool = 1.5; e.hitT = 0.1; }
+          if (!pushOut(e, e.r, b)) continue;
+          if (e.mode === 'dash') { e.mode = 'walk'; e.cool = 1.5; e.hitT = 0.1; }
+          if (e.wander) e.angle += rand(-0.25, 0.25) + (Math.random() < 0.02 ? Math.PI : 0);
         }
       }
     }
@@ -797,7 +1045,7 @@ export class Game {
   updateSpawns(dt) {
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
-      this.spawnT = (Math.max(0.45, 1.85 - this.wave * 0.14) / this.diff.spawnRate) * rand(0.75, 1.25);
+      this.spawnT = (Math.max(0.45, 1.85 - this.wave * 0.14) / (this.diff.spawnRate * this.modeCfg.spawnRate)) * rand(0.75, 1.25);
       if (this.enemies.length + this.warns.length < this.maxEnemies()) {
         const n = this.wave >= 3 && Math.random() < 0.15 + this.wave * 0.04 ? 2 : 1;
         for (let i = 0; i < n; i++) this.queueEnemy();
@@ -810,6 +1058,12 @@ export class Game {
         this.warns.splice(i, 1);
         this.spawnEnemy(w);
       }
+    }
+
+    this.powerT -= dt;
+    if (this.powerT <= 0) {
+      this.powerT = rand(...this.modeCfg.powerEvery);
+      if (this.powerups.length < 2) this.spawnPower();
     }
 
     this.pickupT -= dt;
@@ -911,9 +1165,13 @@ export class Game {
     this.drawWarns(ctx);
     this.drawFoods(ctx);
     this.drawPickups(ctx);
+    this.drawStars(ctx);
+    this.drawPowerups(ctx);
     for (const b of this.bombs) this.drawShadow(ctx, b.x, b.y, 0.32 * (1 - Math.min(b.z, 2) * 0.2));
     if (this.state === 'play' || (this.state === 'dying' && this.deathT < 0.05)) this.drawSnake(ctx);
     for (const e of this.enemies) this.drawEnemy(ctx, e);
+    this.drawBullets(ctx);
+    if (this.state === 'play') this.drawSnakeFx(ctx);
     for (const b of this.bombs) this.drawBomb(ctx, b);
     this.drawBlasts(ctx);
     this.drawParticles(ctx);
@@ -1066,6 +1324,107 @@ export class Game {
     }
   }
 
+  drawStars(ctx) {
+    for (const st of this.stars) {
+      const pulse = 1 + Math.sin(this.t * 4 + st.ph) * 0.1;
+      ctx.globalCompositeOperation = 'lighter';
+      const gr = 1.5 * pulse;
+      ctx.drawImage(glowSprite('#ffd166'), st.x - gr, st.y - gr, gr * 2, gr * 2);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.save();
+      ctx.translate(st.x, st.y);
+      ctx.rotate(Math.sin(this.t * 1.5 + st.ph) * 0.3);
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const r = (k % 2 ? 0.24 : 0.55) * pulse, a = -Math.PI / 2 + (k * Math.PI) / 5;
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#ffd166';
+      ctx.fill();
+      ctx.strokeStyle = '#fff3c4';
+      ctx.lineWidth = 0.06;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  drawPowerups(ctx) {
+    for (const p of this.powerups) {
+      if (p.life - p.t < 3 && Math.sin(p.t * 18) < 0) continue;
+      const def = POWERS[p.type];
+      const bob = Math.sin(this.t * 3 + p.ph) * 0.1;
+      const grow = Math.min(1, p.t * 4);
+      const x = p.x, y = p.y + bob, r = 0.5 * grow;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(glowSprite(def.color), x - 1.4, y - 1.4, 2.8, 2.8);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#0e1630';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = def.color;
+      ctx.lineWidth = 0.09;
+      ctx.stroke();
+      drawPowerIcon(ctx, p.type, x, y, r * 0.6, def.color);
+    }
+  }
+
+  drawBullets(ctx) {
+    if (!this.bullets.length) return;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#ffbf69';
+    ctx.lineWidth = 0.16;
+    ctx.beginPath();
+    for (const b of this.bullets) {
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.x - b.vx * 0.025, b.y - b.vy * 0.025);
+    }
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // Shield bubble, blaster muzzle and the pointer to the nearest star.
+  drawSnakeFx(ctx) {
+    const s = this.snake;
+    const sh = this.power.shield;
+    if (sh > 0 && (sh > 1.5 || Math.sin(this.t * 20) > 0)) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(glowSprite('#4cc9ff'), s.x - 1.6, s.y - 1.6, 3.2, 3.2);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = `rgba(76,201,255,${0.6 + Math.sin(this.t * 6) * 0.2})`;
+      ctx.lineWidth = 0.1;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 1.0, 0, TAU);
+      ctx.stroke();
+    }
+    if (this.power.blaster > 0) {
+      ctx.fillStyle = '#ff9f1c';
+      ctx.beginPath();
+      ctx.arc(s.x + Math.cos(s.angle) * 0.75, s.y + Math.sin(s.angle) * 0.75, 0.12 + (this.fireT > 0.1 ? 0.08 : 0), 0, TAU);
+      ctx.fill();
+    }
+    if (this.stars.length) {
+      let best = null, bd = Infinity;
+      for (const st of this.stars) { const d = d2(s.x, s.y, st.x, st.y); if (d < bd) { bd = d; best = st; } }
+      if (bd > 9) {
+        const a = Math.atan2(best.y - s.y, best.x - s.x);
+        ctx.save();
+        ctx.translate(s.x + Math.cos(a) * 1.5, s.y + Math.sin(a) * 1.5);
+        ctx.rotate(a);
+        ctx.globalAlpha = 0.55 + Math.sin(this.t * 6) * 0.25;
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath();
+        ctx.moveTo(0.32, 0); ctx.lineTo(-0.18, 0.22); ctx.lineTo(-0.18, -0.22);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
   drawWarns(ctx) {
     for (const w of this.warns) {
       const k = w.t / w.dur;
@@ -1168,6 +1527,19 @@ export class Game {
   }
 
   drawEnemy(ctx, e) {
+    this.drawEnemyBody(ctx, e);
+    if (this.power.freeze > 0) {
+      ctx.fillStyle = 'rgba(189,224,254,0.55)';
+      ctx.strokeStyle = '#e8f4ff';
+      ctx.lineWidth = 0.06;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.r * 1.15, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  drawEnemyBody(ctx, e) {
     const def = ENEMY[e.type];
     const flash = e.hitT > 0;
     this.drawShadow(ctx, e.x, e.y, e.r * 0.9);
@@ -1344,6 +1716,37 @@ export class Game {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
   }
+}
+
+export function drawPowerIcon(ctx, type, x, y, r, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = r * 0.28;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (type === 'shield') {
+    ctx.moveTo(0, -r);
+    ctx.lineTo(r * 0.85, -r * 0.6);
+    ctx.quadraticCurveTo(r * 0.8, r * 0.6, 0, r);
+    ctx.quadraticCurveTo(-r * 0.8, r * 0.6, -r * 0.85, -r * 0.6);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (type === 'blaster') {
+    ctx.moveTo(-r * 0.9, r * 0.5); ctx.lineTo(r * 0.9, r * 0.5);
+    ctx.moveTo(-r * 0.9, -r * 0.1); ctx.lineTo(r * 0.9, -r * 0.1);
+    ctx.moveTo(-r * 0.9, -r * 0.7); ctx.lineTo(r * 0.9, -r * 0.7);
+    ctx.stroke();
+  } else {
+    for (let k = 0; k < 3; k++) {
+      const a = (k * Math.PI) / 3;
+      ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      ctx.lineTo(-Math.cos(a) * r, -Math.sin(a) * r);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function eyes(ctx, x, y, r) {

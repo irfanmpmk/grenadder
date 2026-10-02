@@ -100,6 +100,10 @@ export const sfx = {
     noise({ dur: 1.2, vol: 0.5, f0: 1800, f1: 40 });
     tone({ freq: 440, to: 55, dur: 1.0, type: 'sawtooth', vol: 0.18 });
   },
+  shoot() { tone({ freq: 1200, to: 500, dur: 0.05, type: 'square', vol: 0.035 }); },
+  power() {
+    [440, 660, 880].forEach((f, i) => tone({ freq: f, dur: 0.1, type: 'triangle', vol: 0.14, delay: i * 0.06 }));
+  },
   click() { tone({ freq: 900, dur: 0.04, type: 'square', vol: 0.06 }); },
 };
 
