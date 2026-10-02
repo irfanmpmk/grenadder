@@ -35,11 +35,27 @@
     <div class="panel">
       <h1 class="logo">GREN<span>ADDER</span></h1>
       <p class="tag">A snake. With grenades.</p>
+      <div class="opt">
+        <span class="opt-label" id="lbl-mode">MODE</span>
+        <div class="seg" id="seg-mode" role="radiogroup" aria-labelledby="lbl-mode">
+          <button type="button" role="radio" data-v="classic">Classic</button>
+          <button type="button" role="radio" data-v="walls">Walls</button>
+        </div>
+      </div>
+      <div class="opt">
+        <span class="opt-label" id="lbl-diff">DIFFICULTY</span>
+        <div class="seg" id="seg-diff" role="radiogroup" aria-labelledby="lbl-diff">
+          <button type="button" role="radio" data-v="easy">Easy</button>
+          <button type="button" role="radio" data-v="normal">Normal</button>
+          <button type="button" role="radio" data-v="hard">Hard</button>
+        </div>
+      </div>
+      <p class="opt-desc" id="opt-desc"></p>
       <button id="btn-play" class="btn primary">PLAY</button>
       <div class="best">BEST <b id="menu-best">0</b></div>
       <ul class="howto">
         <li><b>Drag</b> anywhere to steer</li>
-        <li><b>Tap</b> to throw a grenade</li>
+        <li><b>Tap</b> any spot to throw a grenade there</li>
         <li>Eat <i class="dot orb"></i> to grow, grab <i class="dot nade"></i> for ammo</li>
         <li>Chain explosions for combos. Don't bite yourself!</li>
       </ul>
@@ -60,6 +76,7 @@
   <section id="over" class="overlay hidden">
     <div class="panel">
       <h2>GAME OVER</h2>
+      <div class="over-mode" id="over-mode"></div>
       <div class="final" id="over-score">0</div>
       <div id="over-new" class="new-best hidden">NEW BEST!</div>
       <div class="stats" id="over-stats"></div>

@@ -20,11 +20,31 @@ export const CFG = {
   baseSpeed: 5.0,
   turnRate: 4.8,
   startLen: 8,
-  maxAmmo: 5,
-  startAmmo: 3,
-  blastR: 3.2,
-  fuse: 1.05,
-  waveTime: 22,
+  fuseAfterLanding: 0.45,
+};
+
+// Everything that changes between difficulty levels lives here.
+export const DIFFICULTY = {
+  easy: {
+    label: 'Easy', startAmmo: 5, maxAmmo: 8, pickupEvery: [3, 4.5], maxPickups: 3, starveDelay: 1,
+    enemyCap: 0.6, spawnRate: 0.65, enemySpeed: 0.8, snakeSpeed: 0.92, blastR: 3.8, waveTime: 28,
+    dasherWave: 3, bruteWave: 6, bruteHp: 2, dropChance: 0.12, crateDrop: 0.45, scoreMult: 0.5,
+  },
+  normal: {
+    label: 'Normal', startAmmo: 3, maxAmmo: 5, pickupEvery: [4.5, 7], maxPickups: 2, starveDelay: 1.5,
+    enemyCap: 1, spawnRate: 1, enemySpeed: 1, snakeSpeed: 1, blastR: 3.2, waveTime: 22,
+    dasherWave: 2, bruteWave: 4, bruteHp: 3, dropChance: 0.06, crateDrop: 0.3, scoreMult: 1,
+  },
+  hard: {
+    label: 'Hard', startAmmo: 2, maxAmmo: 4, pickupEvery: [7, 10], maxPickups: 1, starveDelay: 3,
+    enemyCap: 1.4, spawnRate: 1.45, enemySpeed: 1.2, snakeSpeed: 1.08, blastR: 2.8, waveTime: 18,
+    dasherWave: 1, bruteWave: 3, bruteHp: 4, dropChance: 0.03, crateDrop: 0.18, scoreMult: 2,
+  },
+};
+
+export const MODES = {
+  classic: { label: 'Classic' },
+  walls: { label: 'Walls' },
 };
 
 const ENEMY = {
@@ -32,6 +52,64 @@ const ENEMY = {
   dasher: { r: 0.48, speed: 1.6, hp: 1, score: 150, color: '#ffb703', dark: '#8a5a00' },
   brute: { r: 0.95, speed: 1.2, hp: 3, score: 300, color: '#c77dff', dark: '#5a2a85' },
 };
+
+// ------------------------------------------------------------- wall helpers
+function circleRect(cx, cy, r, b) {
+  const nx = clamp(cx, b.x, b.x + b.w), ny = clamp(cy, b.y, b.y + b.h);
+  const dx = cx - nx, dy = cy - ny;
+  return dx * dx + dy * dy < r * r;
+}
+
+// Move a circle {x,y} of radius r so it no longer overlaps rect b.
+function pushOut(o, r, b) {
+  const nx = clamp(o.x, b.x, b.x + b.w), ny = clamp(o.y, b.y, b.y + b.h);
+  const dx = o.x - nx, dy = o.y - ny;
+  const dd = dx * dx + dy * dy;
+  if (dd >= r * r) return false;
+  if (dd > 1e-8) {
+    const d = Math.sqrt(dd);
+    o.x = nx + (dx / d) * r;
+    o.y = ny + (dy / d) * r;
+  } else {
+    const l = o.x - b.x, rt = b.x + b.w - o.x, t = o.y - b.y, bt = b.y + b.h - o.y;
+    const m = Math.min(l, rt, t, bt);
+    if (m === l) o.x = b.x - r;
+    else if (m === rt) o.x = b.x + b.w + r;
+    else if (m === t) o.y = b.y - r;
+    else o.y = b.y + b.h + r;
+  }
+  return true;
+}
+
+// Does the segment (x0,y0)-(x1,y1) pass through rect b? (slab test)
+function segRect(x0, y0, x1, y1, b, pad = 0) {
+  let t0 = 0, t1 = 1;
+  const dx = x1 - x0, dy = y1 - y0;
+  const p = [-dx, dx, -dy, dy];
+  const q = [x0 - (b.x - pad), b.x + b.w + pad - x0, y0 - (b.y - pad), b.y + b.h + pad - y0];
+  for (let i = 0; i < 4; i++) {
+    if (p[i] === 0) { if (q[i] < 0) return false; continue; }
+    const t = q[i] / p[i];
+    if (p[i] < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return true;
+}
+
+function overlaps(a, b, pad = 0) {
+  return a.x < b.x + b.w + pad && a.x + a.w + pad > b.x && a.y < b.y + b.h + pad && a.y + a.h + pad > b.y;
+}
+
+// Wall layouts in normalized arena coordinates, so they fit any screen shape.
+const LAYOUTS = [
+  { name: 'Pillars', start: [0.5, 0.62, -Math.PI / 2], blocks: [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]] },
+  { name: 'Bars', start: [0.5, 0.62, -Math.PI / 2], h: [[0.1, 0.42, 0.3], [0.58, 0.9, 0.3], [0.1, 0.42, 0.8], [0.58, 0.9, 0.8]] },
+  { name: 'Rooms', start: [0.28, 0.68, 0], v: [[0.5, 0.06, 0.32], [0.5, 0.74, 0.94]], h: [[0.06, 0.3, 0.5], [0.7, 0.94, 0.5]] },
+  {
+    name: 'Corners', start: [0.5, 0.62, -Math.PI / 2],
+    h: [[0.12, 0.34, 0.14], [0.66, 0.88, 0.14], [0.12, 0.34, 0.86], [0.66, 0.88, 0.86]],
+    v: [[0.12, 0.14, 0.3], [0.88, 0.14, 0.3], [0.12, 0.7, 0.86], [0.88, 0.7, 0.86]],
+  },
+];
 
 // Pre-rendered radial glow sprites: much cheaper than shadowBlur on mobile GPUs.
 const glowCache = new Map();
@@ -53,14 +131,15 @@ function glowSprite(color) {
 }
 
 class Snake {
-  constructor(x, y) {
+  constructor(x, y, angle = -Math.PI / 2) {
     this.x = x;
     this.y = y;
-    this.angle = -Math.PI / 2;
+    this.angle = angle;
     this.target = this.angle;
     this.len = CFG.startLen;
     this.path = [];
-    for (let i = 0; i <= this.len * CFG.segSpacing * 10 + 4; i++) this.path.push({ x, y: y + i * 0.1 });
+    const bx = -Math.cos(angle) * 0.1, by = -Math.sin(angle) * 0.1;
+    for (let i = 0; i <= this.len * CFG.segSpacing * 10 + 4; i++) this.path.push({ x: x + bx * i, y: y + by * i });
     this.segs = [];
     this.updateSegs();
   }
@@ -128,14 +207,148 @@ export class Game {
         s.updateSegs();
       }
       for (const list of [this.enemies, this.foods, this.pickups, this.bombs, this.warns]) list.forEach((o) => keepIn(o));
+      if (this.mode === 'walls') {
+        // Rotation mid-game: rescale the layout and give the player a moment.
+        this.buildWalls();
+        this.crates = this.crates.filter((c) => c.x + c.w < W && c.y + c.h < H && !this.walls.some((w) => overlaps(c, w)));
+        this.rebuildObstacles();
+        this.grace = 1.2;
+      }
     }
+  }
+
+  buildWalls() {
+    const L = this.layout, W = this.W, H = this.H, t = 0.9;
+    const walls = [];
+    for (const [x0, x1, y] of L.h || []) walls.push({ x: x0 * W, y: y * H - t / 2, w: (x1 - x0) * W, h: t });
+    for (const [x, y0, y1] of L.v || []) walls.push({ x: x * W - t / 2, y: y0 * H, w: t, h: (y1 - y0) * H });
+    const s = Math.min(2.4, Math.min(W, H) * 0.14);
+    for (const [x, y] of L.blocks || []) walls.push({ x: x * W - s / 2, y: y * H - s / 2, w: s, h: s });
+    this.walls = walls;
+  }
+
+  rebuildObstacles() {
+    this.obstacles = this.walls.concat(this.crates);
+    this.flowDirty = true;
+  }
+
+  blocked(x, y, r) {
+    for (const b of this.obstacles) if (circleRect(x, y, r, b)) return true;
+    return false;
+  }
+
+  lineOfSight(x0, y0, x1, y1, pad = 0) {
+    for (const b of this.obstacles) if (segRect(x0, y0, x1, y1, b, pad)) return false;
+    return true;
+  }
+
+  // How far the snake could travel from (x,y) along angle a before hitting something.
+  runway(x, y, a, max = 7) {
+    for (let d = 0; d <= max; d += 0.25) {
+      const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d;
+      if (px < 1 || py < 1 || px > this.W - 1 || py > this.H - 1 || this.blocked(px, py, 0.8)) return d;
+    }
+    return max;
+  }
+
+  // Use the layout's start if it has room ahead, otherwise find a spot that does.
+  safeStart([nx, ny, a]) {
+    const x = nx * this.W, y = ny * this.H;
+    if (!this.blocked(x, y, 1) && this.runway(x, y, a) >= 6) return [nx, ny, a];
+    let best = [nx, ny, a], bestRun = -1;
+    for (let i = 0; i < 80; i++) {
+      const px = rand(2, this.W - 2), py = rand(2, this.H - 2);
+      if (this.blocked(px, py, 1.2)) continue;
+      for (const pa of [-Math.PI / 2, 0, Math.PI, Math.PI / 2]) {
+        const run = this.runway(px, py, pa);
+        if (run > bestRun) { bestRun = run; best = [px / this.W, py / this.H, pa]; }
+      }
+      if (bestRun >= 7) break;
+    }
+    return best;
+  }
+
+  addCrates(n) {
+    const s = this.snake;
+    for (let i = 0; i < n; i++) {
+      for (let tries = 0; tries < 30; tries++) {
+        const x = Math.floor(rand(1, this.W - 2)) + 0.1, y = Math.floor(rand(1, this.H - 2)) + 0.1;
+        const c = { x, y, w: 0.9, h: 0.9, crate: true };
+        if (d2(x + 0.45, y + 0.45, s.x, s.y) < 16) continue;
+        // Keep the lane in front of the snake clear so a crate never appears in its face.
+        const rx = x + 0.45 - s.x, ry = y + 0.45 - s.y;
+        const along = rx * Math.cos(s.angle) + ry * Math.sin(s.angle);
+        const perp = Math.abs(ry * Math.cos(s.angle) - rx * Math.sin(s.angle));
+        if (along > -1 && along < 10 && perp < 2.2) continue;
+        if (this.obstacles.some((o) => overlaps(c, o, 0.9))) continue;
+        if (s.segs.some((g) => circleRect(g.x, g.y, 0.6, c))) continue;
+        this.crates.push(c);
+        this.rebuildObstacles();
+        break;
+      }
+    }
+  }
+
+  // Breadth-first distance field from the snake's head on a 1-unit grid,
+  // so enemies can path around walls instead of pushing into them.
+  updateFlow() {
+    const gw = Math.ceil(this.W), gh = Math.ceil(this.H);
+    let f = this.flow;
+    if (!f || f.gw !== gw || f.gh !== gh) {
+      f = this.flow = { gw, gh, solid: new Uint8Array(gw * gh), dist: new Int16Array(gw * gh), queue: new Int32Array(gw * gh) };
+      this.flowDirty = true;
+    }
+    if (this.flowDirty) {
+      for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) f.solid[y * gw + x] = this.blocked(x + 0.5, y + 0.5, 0.45) ? 1 : 0;
+      this.flowDirty = false;
+    }
+    f.dist.fill(-1);
+    const hx = clamp(Math.floor(this.snake.x), 0, gw - 1), hy = clamp(Math.floor(this.snake.y), 0, gh - 1);
+    let head = 0, tail = 0;
+    f.dist[hy * gw + hx] = 0;
+    f.queue[tail++] = hy * gw + hx;
+    while (head < tail) {
+      const i = f.queue[head++];
+      const x = i % gw, y = (i / gw) | 0, nd = f.dist[i] + 1;
+      for (let k = 0; k < 4; k++) {
+        const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0);
+        if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+        const j = ny * gw + nx;
+        if (f.solid[j] || f.dist[j] !== -1) continue;
+        f.dist[j] = nd;
+        f.queue[tail++] = j;
+      }
+    }
+  }
+
+  // Heading toward the neighbouring cell that is closest to the snake.
+  flowAngle(x, y) {
+    const f = this.flow;
+    if (!f) return null;
+    const cx = clamp(Math.floor(x), 0, f.gw - 1), cy = clamp(Math.floor(y), 0, f.gh - 1);
+    let best = -1, bx = 0, by = 0;
+    for (let oy = -1; oy <= 1; oy++) {
+      for (let ox = -1; ox <= 1; ox++) {
+        if (!ox && !oy) continue;
+        const nx = cx + ox, ny = cy + oy;
+        if (nx < 0 || ny < 0 || nx >= f.gw || ny >= f.gh) continue;
+        if (ox && oy && (f.solid[cy * f.gw + nx] || f.solid[ny * f.gw + cx])) continue;
+        const d = f.dist[ny * f.gw + nx];
+        if (d < 0) continue;
+        if (best < 0 || d < best) { best = d; bx = nx; by = ny; }
+      }
+    }
+    return best < 0 ? null : Math.atan2(by + 0.5 - y, bx + 0.5 - x);
   }
 
   makeIdleScene() {
     this.idleSeed = Array.from({ length: 14 }, () => ({ x: rand(1, this.W - 1), y: rand(1, this.H - 1), p: rand(0, TAU) }));
   }
 
-  reset() {
+  reset({ mode = 'classic', difficulty = 'normal' } = {}) {
+    this.mode = MODES[mode] ? mode : 'classic';
+    this.difficulty = DIFFICULTY[difficulty] ? difficulty : 'normal';
+    this.diff = DIFFICULTY[this.difficulty];
     this.time = 0;
     this.wave = 1;
     this.score = 0;
@@ -144,8 +357,21 @@ export class Game {
     this.combo = 0;
     this.comboT = 0;
     this.thrown = 0;
-    this.snake = new Snake(this.W / 2, this.H * 0.62);
-    this.ammo = CFG.startAmmo;
+    this.grace = 0;
+    this.walls = [];
+    this.crates = [];
+    this.obstacles = [];
+    this.flow = null;
+    this.flowT = 0;
+    let start = [0.5, 0.62, -Math.PI / 2];
+    if (this.mode === 'walls') {
+      this.layout = LAYOUTS[Math.floor(Math.random() * LAYOUTS.length)];
+      this.buildWalls();
+      this.rebuildObstacles();
+      start = this.safeStart(this.layout.start);
+    }
+    this.snake = new Snake(start[0] * this.W, start[1] * this.H, start[2]);
+    this.ammo = this.diff.startAmmo;
     this.enemies = [];
     this.foods = [];
     this.pickups = [];
@@ -161,12 +387,14 @@ export class Game {
     this.flash = 0;
     this.deathT = 0;
     for (let i = 0; i < this.foodTarget(); i++) this.spawnFood('orb');
+    if (this.mode === 'walls') this.addCrates(this.crateTarget());
     this.state = 'play';
   }
 
   foodTarget() { return 3 + Math.floor((this.W * this.H) / 220); }
-  maxEnemies() { return Math.min(10 + this.wave * 3, 45); }
-  speed() { return CFG.baseSpeed + Math.min(this.wave - 1, 8) * 0.22; }
+  crateTarget() { return 4 + Math.floor((this.W * this.H) / 160); }
+  maxEnemies() { return Math.round(Math.min(10 + this.wave * 3, 45) * this.diff.enemyCap); }
+  speed() { return (CFG.baseSpeed + Math.min(this.wave - 1, 8) * 0.22) * this.diff.snakeSpeed; }
 
   // ---------------------------------------------------------------- spawning
   freeSpot(minHead = 4, margin = 1.2) {
@@ -174,9 +402,14 @@ export class Game {
     for (let tries = 0; tries < 30; tries++) {
       const x = rand(margin, this.W - margin), y = rand(margin, this.H - margin);
       if (d2(x, y, s.x, s.y) < minHead * minHead) continue;
+      if (this.blocked(x, y, 0.9)) continue;
       let ok = true;
       for (const g of s.segs) if (d2(x, y, g.x, g.y) < 1) { ok = false; break; }
       if (ok) return { x, y };
+    }
+    for (let tries = 0; tries < 50; tries++) {
+      const x = rand(margin, this.W - margin), y = rand(margin, this.H - margin);
+      if (!this.blocked(x, y, 0.9)) return { x, y };
     }
     return { x: rand(margin, this.W - margin), y: rand(margin, this.H - margin) };
   }
@@ -199,19 +432,19 @@ export class Game {
       const m = 1.2;
       x = edge === 0 ? m : edge === 1 ? this.W - m : rand(m, this.W - m);
       y = edge === 2 ? m : edge === 3 ? this.H - m : rand(m, this.H - m);
-      if (d2(x, y, s.x, s.y) > 36) break;
+      if (d2(x, y, s.x, s.y) > 36 && !this.blocked(x, y, 1.1)) break;
     }
     const r = Math.random();
     let type = 'crawler';
-    if (this.wave >= 4 && r < 0.14) type = 'brute';
-    else if (this.wave >= 2 && r < 0.38) type = 'dasher';
+    if (this.wave >= this.diff.bruteWave && r < 0.14) type = 'brute';
+    else if (this.wave >= this.diff.dasherWave && r < 0.38) type = 'dasher';
     this.warns.push({ x, y, t: 0, dur: 0.9, type });
   }
 
   spawnEnemy(w) {
     const def = ENEMY[w.type];
     this.enemies.push({
-      type: w.type, x: w.x, y: w.y, r: def.r, hp: def.hp, angle: Math.atan2(this.snake.y - w.y, this.snake.x - w.x),
+      type: w.type, x: w.x, y: w.y, r: def.r, hp: w.type === 'brute' ? this.diff.bruteHp : def.hp, angle: Math.atan2(this.snake.y - w.y, this.snake.x - w.x),
       vx: 0, vy: 0, t: rand(0, 10), hitT: 0, mode: 'walk', modeT: 0, cool: rand(1, 2.5), dead: false,
     });
     this.burst(w.x, w.y, def.color, 10, 4);
@@ -239,16 +472,21 @@ export class Game {
     }
 
     this.time += dt;
-    const wave = 1 + Math.floor(this.time / CFG.waveTime);
+    const wave = 1 + Math.floor(this.time / this.diff.waveTime);
     if (wave > this.wave) {
       this.wave = wave;
       this.hooks.onWave?.(wave);
       sfx.wave();
-      if (this.ammo < CFG.maxAmmo) this.spawnPickup();
+      if (this.ammo < this.diff.maxAmmo) this.spawnPickup();
+      if (this.mode === 'walls') this.addCrates(Math.max(0, Math.min(3, this.crateTarget() - this.crates.length)));
     }
 
     this.updateSnake(dt, input);
     if (this.state !== 'play') return;
+    if (this.obstacles.length) {
+      this.flowT -= dt;
+      if (this.flowT <= 0) { this.updateFlow(); this.flowT = 0.2; }
+    }
     this.updateBombs(dt);
     this.updateEnemies(dt);
     if (this.state !== 'play') return;
@@ -273,10 +511,13 @@ export class Game {
     s.path.unshift({ x: s.x, y: s.y });
     s.updateSegs();
 
-    if (input.consumeThrow()) this.throwBomb();
+    const req = input.consumeThrow();
+    if (req) this.throwBomb(req);
 
     const wr = CFG.headR * 0.7;
     if (s.x < wr || s.y < wr || s.x > this.W - wr || s.y > this.H - wr) return this.die();
+    if (this.grace > 0) this.grace -= dt;
+    else if (this.blocked(s.x, s.y, CFG.headR * 0.65)) return this.die();
     const hitR = (CFG.headR + CFG.bodyR) * 0.75;
     for (let i = 5; i < s.segs.length; i++) {
       const g = s.segs[i];
@@ -311,7 +552,7 @@ export class Game {
       const r = CFG.headR + 0.55;
       if (d2(s.x, s.y, p.x, p.y) < r * r) {
         this.pickups.splice(i, 1);
-        if (this.ammo < CFG.maxAmmo) {
+        if (this.ammo < this.diff.maxAmmo) {
           this.ammo++;
           this.text(p.x, p.y, '+1 GRENADE', '#b6ff6e', 0.9);
         } else {
@@ -324,20 +565,37 @@ export class Game {
     }
   }
 
-  throwBomb() {
+  // Throw a grenade to the tapped point (or straight ahead for keyboard play).
+  throwBomb(req = { fwd: true }) {
+    const s = this.snake;
     if (this.ammo <= 0) {
       sfx.empty();
-      this.text(this.snake.x, this.snake.y - 1.2, 'NO GRENADES', '#ff4d6d', 0.6);
+      this.text(s.x, s.y - 1.2, 'NO GRENADES', '#ff4d6d', 0.6);
       return;
     }
+    let tx, ty;
+    if (req.fwd || !this.view) {
+      tx = s.x + Math.cos(s.angle) * 6;
+      ty = s.y + Math.sin(s.angle) * 6;
+    } else {
+      tx = (req.sx - this.view.x) / this.view.U;
+      ty = (req.sy - this.view.y) / this.view.U;
+    }
+    const t = { x: clamp(tx, 0.4, this.W - 0.4), y: clamp(ty, 0.4, this.H - 0.4) };
+    for (let k = 0; k < 3; k++) for (const b of this.obstacles) pushOut(t, 0.45, b);
+    t.x = clamp(t.x, 0.4, this.W - 0.4);
+    t.y = clamp(t.y, 0.4, this.H - 0.4);
+
     this.ammo--;
     this.thrown++;
-    const s = this.snake;
-    const sp = 10.5;
+    const ox = s.x + Math.cos(s.angle) * 0.6, oy = s.y + Math.sin(s.angle) * 0.6;
+    const dx = t.x - ox, dy = t.y - oy;
+    const flight = clamp(0.22 + Math.hypot(dx, dy) / 16, 0.25, 0.9);
+    const z0 = 0.4, g = 20;
     this.bombs.push({
-      x: s.x + Math.cos(s.angle) * 0.6, y: s.y + Math.sin(s.angle) * 0.6,
-      vx: Math.cos(s.angle) * sp, vy: Math.sin(s.angle) * sp, z: 0.4, vz: 6.5,
-      t: 0, fuse: CFG.fuse, spin: rand(-12, 12), rot: 0, bounced: false,
+      x: ox, y: oy, vx: dx / flight, vy: dy / flight, z: z0, vz: (g * flight) / 2 - z0 / flight,
+      tx: t.x, ty: t.y, flight, landed: false,
+      t: 0, fuse: flight + CFG.fuseAfterLanding, spin: rand(-12, 12), rot: 0,
     });
     sfx.throw();
     buzz(10);
@@ -347,30 +605,22 @@ export class Game {
     for (let i = this.bombs.length - 1; i >= 0; i--) {
       const b = this.bombs[i];
       b.t += dt;
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
       b.rot += b.spin * dt;
-      if (b.z > 0 || b.vz > 0) {
+      if (!b.landed) {
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
         b.vz -= 20 * dt;
-        b.z += b.vz * dt;
-        if (b.z <= 0) {
+        b.z = Math.max(0, b.z + b.vz * dt);
+        if (b.t >= b.flight) {
+          b.landed = true;
+          b.x = b.tx;
+          b.y = b.ty;
           b.z = 0;
-          if (!b.bounced && b.vz < -3) {
-            b.vz = -b.vz * 0.3;
-            b.bounced = true;
-            sfx.bounce();
-          } else b.vz = 0;
-          b.vx *= 0.55;
-          b.vy *= 0.55;
+          b.spin = 0;
+          sfx.bounce();
+          this.burst(b.x, b.y, '#8ea3c4', 5, 2);
         }
-      } else {
-        const f = Math.pow(0.02, dt);
-        b.vx *= f;
-        b.vy *= f;
-        b.spin *= f;
       }
-      if (b.x < 0.3 || b.x > this.W - 0.3) { b.vx = -b.vx * 0.6; b.x = clamp(b.x, 0.3, this.W - 0.3); }
-      if (b.y < 0.3 || b.y > this.H - 0.3) { b.vy = -b.vy * 0.6; b.y = clamp(b.y, 0.3, this.H - 0.3); }
       if (b.t >= b.fuse) {
         this.bombs.splice(i, 1);
         this.explode(b.x, b.y);
@@ -379,7 +629,7 @@ export class Game {
   }
 
   explode(x, y) {
-    const R = CFG.blastR;
+    const R = this.diff.blastR;
     this.blasts.push({ x, y, t: 0, r: R });
     this.shake = Math.min(1, this.shake + 0.55);
     this.hitstop = Math.max(this.hitstop, 0.035);
@@ -416,10 +666,25 @@ export class Game {
       const p = this.pickups[i];
       if (d2(x, y, p.x, p.y) < R * R) {
         this.pickups.splice(i, 1);
-        this.bombs.push({ x: p.x, y: p.y, vx: 0, vy: 0, z: 0, vz: 0, t: 0, fuse: 0.14, spin: 0, rot: 0, bounced: true });
+        this.bombs.push({ x: p.x, y: p.y, tx: p.x, ty: p.y, vx: 0, vy: 0, z: 0, vz: 0, t: 0, flight: 0, landed: true, fuse: 0.14, spin: 0, rot: 0 });
       }
     }
-    for (const b of this.bombs) if (b.fuse - b.t > 0.14 && d2(x, y, b.x, b.y) < R * R) b.t = b.fuse - 0.14;
+    for (const b of this.bombs) if (b.landed && b.fuse - b.t > 0.14 && d2(x, y, b.x, b.y) < R * R) b.t = b.fuse - 0.14;
+
+    // Crates in the blast break open and drop loot.
+    let broke = false;
+    for (let i = this.crates.length - 1; i >= 0; i--) {
+      const c = this.crates[i];
+      if (!circleRect(x, y, R * 0.9, c)) continue;
+      this.crates.splice(i, 1);
+      broke = true;
+      const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+      this.burst(cx, cy, '#ffb347', 16, 6);
+      this.addScore(50, cx, cy, '#ffb347');
+      if (Math.random() < this.diff.crateDrop) this.spawnPickup(cx, cy);
+      else this.spawnFood('gem', cx, cy);
+    }
+    if (broke) this.rebuildObstacles();
   }
 
   killEnemy(e) {
@@ -434,7 +699,7 @@ export class Game {
     this.burst(e.x, e.y, def.color, 18, 7);
     sfx.kill();
     if (Math.random() < 0.6) this.spawnFood('gem', e.x, e.y);
-    if (e.type === 'brute' || Math.random() < 0.06) this.spawnPickup(clamp(e.x, 1, this.W - 1), clamp(e.y, 1, this.H - 1));
+    if (e.type === 'brute' || Math.random() < this.diff.dropChance) this.spawnPickup(clamp(e.x, 1, this.W - 1), clamp(e.y, 1, this.H - 1));
     this.hooks.onCombo?.(this.combo);
   }
 
@@ -447,28 +712,34 @@ export class Game {
       e.hitT -= dt;
       const toHead = Math.atan2(s.y - e.y, s.x - e.x);
       const dist = Math.sqrt(d2(e.x, e.y, s.x, s.y));
-      let speed = def.speed + Math.min(this.wave - 1, 10) * 0.07;
+      let speed = (def.speed + Math.min(this.wave - 1, 10) * 0.07) * this.diff.enemySpeed;
+      // In Walls mode, follow the flow field when the head is out of sight.
+      let chase = toHead, pathing = false;
+      if (this.obstacles.length && !this.lineOfSight(e.x, e.y, s.x, s.y, e.r * 0.8)) {
+        const fa = this.flowAngle(e.x, e.y);
+        if (fa !== null) { chase = fa; pathing = true; }
+      }
 
       if (e.type === 'dasher') {
         e.cool -= dt;
         if (e.mode === 'walk') {
-          e.angle += clamp(angleDiff(e.angle, toHead), -2 * dt, 2 * dt);
-          if (dist < 8 && e.cool <= 0) { e.mode = 'aim'; e.modeT = 0.65; }
+          e.angle += clamp(angleDiff(e.angle, chase), -(pathing ? 5 : 2) * dt, (pathing ? 5 : 2) * dt);
+          if (dist < 8 && e.cool <= 0 && !pathing) { e.mode = 'aim'; e.modeT = 0.65; }
         } else if (e.mode === 'aim') {
           speed = 0;
           e.angle += clamp(angleDiff(e.angle, toHead), -6 * dt, 6 * dt);
           e.modeT -= dt;
           if (e.modeT <= 0) { e.mode = 'dash'; e.modeT = 0.42; sfx.dash(); }
         } else {
-          speed = 11;
+          speed = 11 * this.diff.enemySpeed;
           e.modeT -= dt;
           if (Math.random() < 0.5) this.particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: 0.3, t: 0, size: e.r * 0.8, color: def.color, kind: 'trail' });
           if (e.modeT <= 0) { e.mode = 'walk'; e.cool = rand(1.4, 2.4); }
         }
       } else {
-        const wobble = Math.sin(e.t * 3) * 0.5;
-        const turn = (e.type === 'brute' ? 1.5 : 3) * dt;
-        e.angle += clamp(angleDiff(e.angle, toHead + wobble), -turn, turn);
+        const wobble = Math.sin(e.t * 3) * (pathing ? 0.15 : 0.5);
+        const turn = (e.type === 'brute' ? 1.5 : 3) * (pathing ? 2 : 1) * dt;
+        e.angle += clamp(angleDiff(e.angle, chase + wobble), -turn, turn);
       }
 
       e.x += (Math.cos(e.angle) * speed + e.vx) * dt;
@@ -513,13 +784,20 @@ export class Game {
         }
       }
     }
+    if (this.obstacles.length) {
+      for (const e of es) {
+        for (const b of this.obstacles) {
+          if (pushOut(e, e.r, b) && e.mode === 'dash') { e.mode = 'walk'; e.cool = 1.5; e.hitT = 0.1; }
+        }
+      }
+    }
     this.enemies = es.filter((e) => !e.dead);
   }
 
   updateSpawns(dt) {
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
-      this.spawnT = Math.max(0.45, 1.85 - this.wave * 0.14) * rand(0.75, 1.25);
+      this.spawnT = (Math.max(0.45, 1.85 - this.wave * 0.14) / this.diff.spawnRate) * rand(0.75, 1.25);
       if (this.enemies.length + this.warns.length < this.maxEnemies()) {
         const n = this.wave >= 3 && Math.random() < 0.15 + this.wave * 0.04 ? 2 : 1;
         for (let i = 0; i < n; i++) this.queueEnemy();
@@ -536,10 +814,10 @@ export class Game {
 
     this.pickupT -= dt;
     const starving = this.ammo === 0 && this.pickups.length === 0 && this.bombs.length === 0;
-    if (starving && this.pickupT > 1.5) this.pickupT = 1.5;
+    if (starving && this.pickupT > this.diff.starveDelay) this.pickupT = this.diff.starveDelay;
     if (this.pickupT <= 0) {
-      this.pickupT = rand(4.5, 7);
-      if (this.pickups.length < 2 && this.ammo + this.pickups.length < CFG.maxAmmo) this.spawnPickup();
+      this.pickupT = rand(...this.diff.pickupEvery);
+      if (this.pickups.length < this.diff.maxPickups && this.ammo + this.pickups.length < this.diff.maxAmmo) this.spawnPickup();
     }
   }
 
@@ -589,11 +867,12 @@ export class Game {
   }
 
   summary() {
-    return { score: this.score, wave: this.wave, kills: this.kills, bestCombo: this.bestCombo, length: this.snake.len, time: this.time };
+    return { mode: this.mode, difficulty: this.difficulty, score: this.score, wave: this.wave, kills: this.kills, bestCombo: this.bestCombo, length: this.snake.len, time: this.time };
   }
 
   // ----------------------------------------------------------------- helpers
   addScore(n, x, y, color, suffix = '') {
+    n = Math.max(1, Math.round(n * this.diff.scoreMult));
     this.score += n;
     this.text(x, y, `+${n}${suffix}`, color, suffix ? 1.1 : 0.75);
   }
@@ -628,6 +907,7 @@ export class Game {
       return;
     }
 
+    this.drawWalls(ctx);
     this.drawWarns(ctx);
     this.drawFoods(ctx);
     this.drawPickups(ctx);
@@ -673,6 +953,53 @@ export class Game {
     ctx.lineWidth = 0.35;
     ctx.strokeStyle = 'rgba(92,255,176,0.07)';
     ctx.stroke();
+  }
+
+  drawWalls(ctx) {
+    if (!this.obstacles || !this.obstacles.length) return;
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    for (const b of this.obstacles) {
+      roundRect(ctx, b.x + 0.12, b.y + 0.22, b.w, b.h, 0.18);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.35 + Math.sin(this.t * 2) * 0.05;
+    for (const b of this.walls) ctx.drawImage(glowSprite('#7df9ff'), b.x - 0.7, b.y - 0.7, b.w + 1.4, b.h + 1.4);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    for (const b of this.walls) {
+      const g = ctx.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
+      g.addColorStop(0, '#2c3d82');
+      g.addColorStop(1, '#18224f');
+      ctx.fillStyle = g;
+      roundRect(ctx, b.x, b.y, b.w, b.h, 0.18);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(125,249,255,0.8)';
+      ctx.lineWidth = 0.08;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+      ctx.lineWidth = 0.05;
+      ctx.beginPath();
+      ctx.moveTo(b.x + 0.2, b.y + 0.14);
+      ctx.lineTo(b.x + b.w - 0.2, b.y + 0.14);
+      ctx.stroke();
+    }
+    for (const c of this.crates) {
+      ctx.fillStyle = '#7a4a14';
+      roundRect(ctx, c.x, c.y, c.w, c.h, 0.1);
+      ctx.fill();
+      ctx.strokeStyle = '#ffb347';
+      ctx.lineWidth = 0.07;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,179,71,0.55)';
+      ctx.lineWidth = 0.06;
+      const i = 0.16;
+      ctx.strokeRect(c.x + i, c.y + i, c.w - i * 2, c.h - i * 2);
+      ctx.beginPath();
+      ctx.moveTo(c.x + i, c.y + i); ctx.lineTo(c.x + c.w - i, c.y + c.h - i);
+      ctx.moveTo(c.x + c.w - i, c.y + i); ctx.lineTo(c.x + i, c.y + c.h - i);
+      ctx.stroke();
+    }
   }
 
   drawIdle(ctx) {
@@ -929,6 +1256,20 @@ export class Game {
 
   drawBomb(ctx, b) {
     const left = b.fuse - b.t;
+    if (!b.landed) {
+      // Crosshair on the landing spot while the grenade is in the air.
+      const k = Math.min(1, b.t / b.flight);
+      const r = 0.7 - k * 0.25;
+      ctx.strokeStyle = `rgba(255,209,102,${0.5 + k * 0.4})`;
+      ctx.lineWidth = 0.07;
+      ctx.beginPath();
+      ctx.arc(b.tx, b.ty, r, 0, TAU);
+      ctx.moveTo(b.tx - r - 0.25, b.ty); ctx.lineTo(b.tx - r + 0.2, b.ty);
+      ctx.moveTo(b.tx + r - 0.2, b.ty); ctx.lineTo(b.tx + r + 0.25, b.ty);
+      ctx.moveTo(b.tx, b.ty - r - 0.25); ctx.lineTo(b.tx, b.ty - r + 0.2);
+      ctx.moveTo(b.tx, b.ty + r - 0.2); ctx.lineTo(b.tx, b.ty + r + 0.25);
+      ctx.stroke();
+    }
     const blink = left < 0.5 ? Math.sin(b.t * 50) > 0 : Math.sin(b.t * 18) > 0.3;
     const y = b.y - b.z * 0.6;
     if (blink) {
@@ -937,12 +1278,12 @@ export class Game {
       ctx.globalCompositeOperation = 'source-over';
     }
     drawGrenade(ctx, b.x, y, 0.32, b.rot, false, blink);
-    if (b.z === 0 && left < 0.7) {
+    if (b.landed && left < 0.7) {
       // Telegraph the blast radius just before detonation.
       ctx.strokeStyle = `rgba(255,77,109,${0.15 + (0.7 - left) * 0.5})`;
       ctx.lineWidth = 0.06;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, CFG.blastR, 0, TAU);
+      ctx.arc(b.x, b.y, this.diff.blastR, 0, TAU);
       ctx.stroke();
     }
   }

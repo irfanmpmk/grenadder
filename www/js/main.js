@@ -1,4 +1,4 @@
-import { Game } from './game.js';
+import { Game, DIFFICULTY, MODES } from './game.js';
 import { Input } from './input.js';
 import { initAudio, sfx, isMuted, setMuted } from './audio.js';
 
@@ -12,7 +12,16 @@ const store = {
   get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } },
 };
-let best = Number(store.get('grenadder.best', 0)) || 0;
+// Best score per mode + difficulty. The old single best becomes Classic/Normal.
+const legacyBest = store.get('grenadder.best', null);
+if (legacyBest !== null && store.get('grenadder.best.classic.normal', null) === null) store.set('grenadder.best.classic.normal', legacyBest);
+const bestKey = () => `grenadder.best.${settings.mode}.${settings.difficulty}`;
+const getBest = () => Number(store.get(bestKey(), 0)) || 0;
+
+const settings = {
+  mode: MODES[store.get('grenadder.mode')] ? store.get('grenadder.mode') : 'classic',
+  difficulty: DIFFICULTY[store.get('grenadder.difficulty')] ? store.get('grenadder.difficulty') : 'normal',
+};
 
 const ui = {
   hud: $('hud'), score: $('score'), combo: $('combo'), wave: $('wave'), ammo: $('ammo'), banner: $('banner'),
@@ -32,11 +41,13 @@ const game = new Game({
     ui.combo.classList.add('pop');
   },
   onGameOver(sum) {
+    let best = getBest();
     const isBest = sum.score > best;
     if (isBest) {
       best = sum.score;
-      store.set('grenadder.best', String(best));
+      store.set(bestKey(), String(best));
     }
+    $('over-mode').textContent = `${MODES[sum.mode].label.toUpperCase()} · ${DIFFICULTY[sum.difficulty].label.toUpperCase()}`;
     $('over-score').textContent = sum.score.toLocaleString();
     $('over-best').textContent = best.toLocaleString();
     $('over-new').classList.toggle('hidden', !isBest || sum.score === 0);
@@ -75,6 +86,7 @@ function resize() {
   // ~17 units across the short side, clamped so desktop arenas feel roomy.
   const U = Math.max(14, Math.min(36, Math.min(w, h) / 17));
   view = { x, y, U, sw, sh, dpr };
+  game.view = view;
   game.resize(w / U, h / U);
   buildBackground(sw, sh, dpr);
 }
@@ -108,8 +120,9 @@ function startGame() {
   show(ui.hud);
   paused = false;
   input.reset();
-  game.reset();
+  game.reset(settings);
   lastAmmo = -1;
+  lastWave = -1;
   lastScore = -1;
   showBanner('WAVE 1');
 }
@@ -120,7 +133,7 @@ function toMenu() {
   paused = false;
   game.state = 'idle';
   game.makeIdleScene();
-  $('menu-best').textContent = best.toLocaleString();
+  syncSettings();
   show(ui.menu);
 }
 
@@ -142,6 +155,33 @@ function showBanner(text) {
   ui.banner.classList.add('show');
   clearTimeout(bannerTimer);
   bannerTimer = setTimeout(() => ui.banner.classList.remove('show'), 1300);
+}
+
+function describe(d) {
+  return `${d.startAmmo} grenades to start (max ${d.maxAmmo}), refills every ${d.pickupEvery[0]}-${d.pickupEvery[1]}s. ` +
+    `${d.enemyCap < 1 ? 'Fewer, slower' : d.enemyCap > 1 ? 'More, faster' : 'Standard'} bugs, ` +
+    `${d.blastR > 3.2 ? 'bigger' : d.blastR < 3.2 ? 'smaller' : 'normal'} blasts. Score x${d.scoreMult}.`;
+}
+
+function syncSettings() {
+  for (const [id, key] of [['seg-mode', 'mode'], ['seg-diff', 'difficulty']]) {
+    for (const b of $(id).querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.v === settings[key]));
+  }
+  const modeText = settings.mode === 'walls' ? 'Walls block you and the bugs. Blow up crates for loot. ' : '';
+  $('opt-desc').textContent = modeText + describe(DIFFICULTY[settings.difficulty]);
+  $('menu-best').textContent = getBest().toLocaleString();
+}
+
+for (const [id, key] of [['seg-mode', 'mode'], ['seg-diff', 'difficulty']]) {
+  $(id).addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    initAudio();
+    sfx.click();
+    settings[key] = b.dataset.v;
+    store.set(`grenadder.${key}`, b.dataset.v);
+    syncSettings();
+  });
 }
 
 function syncMute() { $('btn-mute').textContent = `SOUND: ${isMuted() ? 'OFF' : 'ON'}`; }
@@ -180,12 +220,12 @@ function updateHud() {
   if (game.ammo !== lastAmmo) {
     lastAmmo = game.ammo;
     let html = '';
-    for (let i = 0; i < 5; i++) html += `<i class="${i < game.ammo ? '' : 'empty'}"></i>`;
+    for (let i = 0; i < game.diff.maxAmmo; i++) html += `<i class="${i < game.ammo ? '' : 'empty'}"></i>`;
     ui.ammo.innerHTML = html;
   }
   if (game.wave !== lastWave) {
     lastWave = game.wave;
-    ui.wave.textContent = `WAVE ${game.wave}`;
+    ui.wave.textContent = `WAVE ${game.wave} · ${game.diff.label.toUpperCase()}`;
   }
   const c = game.combo >= 2 ? game.combo : 0;
   if (c !== lastCombo) {
@@ -229,7 +269,7 @@ function frame(now) {
 
 resize();
 syncMute();
-$('menu-best').textContent = best.toLocaleString();
+syncSettings();
 requestAnimationFrame(frame);
 
 // Test hook for automated smoke tests.

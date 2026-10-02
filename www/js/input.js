@@ -1,7 +1,7 @@
 // Unified touch / mouse / keyboard input.
 // - Drag anywhere: floating joystick that steers the snake.
-// - Quick tap (or second finger): throw a grenade.
-// - Keyboard: arrows/WASD steer, Space throws.
+// - Quick tap (or second finger): throw a grenade at that spot.
+// - Keyboard: arrows/WASD steer, Space throws straight ahead.
 const TAP_MS = 260;
 const TAP_PX = 14;
 const STICK_RADIUS = 56;
@@ -10,7 +10,7 @@ export class Input {
   constructor(el) {
     this.stick = null;      // active steering pointer
     this.stickAngle = null; // last steering direction from the stick
-    this.throws = 0;        // queued throw requests
+    this.throws = [];       // queued throws: { sx, sy } screen point, or { fwd: true }
     this.keys = new Set();
     this.onPause = null;
 
@@ -27,15 +27,15 @@ export class Input {
   reset() {
     this.stick = null;
     this.stickAngle = null;
-    this.throws = 0;
+    this.throws.length = 0;
     this.keys.clear();
   }
 
   down(e) {
     e.preventDefault();
     if (this.stick) {
-      // Second finger while steering = throw.
-      this.throws++;
+      // Second finger while steering = throw at that finger.
+      this.throws.push({ sx: e.clientX, sy: e.clientY });
       return;
     }
     try { e.target.setPointerCapture?.(e.pointerId); } catch { /* ignore */ }
@@ -62,14 +62,14 @@ export class Input {
   up(e, cancelled = false) {
     const s = this.stick;
     if (!s || s.id !== e.pointerId) return;
-    if (!cancelled && performance.now() - s.t0 < TAP_MS && s.maxMove < TAP_PX) this.throws++;
+    if (!cancelled && performance.now() - s.t0 < TAP_MS && s.maxMove < TAP_PX) this.throws.push({ sx: s.x, sy: s.y });
     this.stick = null;
   }
 
   key(e, isDown) {
     const k = e.key.toLowerCase();
     if (isDown && !e.repeat && (k === ' ' || k === 'enter')) {
-      this.throws++;
+      this.throws.push({ fwd: true });
       e.preventDefault();
       return;
     }
@@ -97,10 +97,6 @@ export class Input {
   }
 
   consumeThrow() {
-    if (this.throws > 0) {
-      this.throws--;
-      return true;
-    }
-    return false;
+    return this.throws.shift() || null;
   }
 }

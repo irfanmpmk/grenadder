@@ -4,21 +4,44 @@ A 2D arcade game for **Android and iOS**: you're a neon snake (an adder) with a 
 and the bugs keep coming.
 
 - **Drag** anywhere to steer (floating joystick)
-- **Tap** (or tap with a second finger while steering) to throw a grenade
-- Eat pink orbs to grow, grab green grenades for ammo (max 5)
+- **Tap** any spot to lob a grenade there, whichever way you're heading (or tap with a second finger while steering)
+- Eat pink orbs to grow, grab green grenades for ammo
 - Grenades caught in a blast cook off → **chain reactions** and **combo multipliers** (up to x10)
 - Your body is a wall: enemies can't cross it, so you can shield yourself and herd them
 - Don't hit the walls or bite your own tail
 
-Enemies get faster and more numerous every 22 seconds (waves):
+### Modes
+
+- **Classic**: open arena.
+- **Walls**: one of four wall layouts (Pillars, Bars, Rooms, Corners) plus breakable crates.
+  Walls kill the snake and block bugs, which path around them. Blow up crates for points,
+  gems and grenades. More crates appear each wave.
+
+### Difficulty
+
+| | Easy | Normal | Hard |
+|---|---|---|---|
+| Grenades at start / max | 5 / 8 | 3 / 5 | 2 / 4 |
+| Grenade refill every | 3-4.5 s | 4.5-7 s | 7-10 s |
+| Refills on the map at once | 3 | 2 | 1 |
+| Bug count / spawn rate / speed | 0.6x / 0.65x / 0.8x | 1x | 1.4x / 1.45x / 1.2x |
+| Blast radius | 3.8 | 3.2 | 2.8 |
+| Wave length | 28 s | 22 s | 18 s |
+| Dashers / Brutes from wave | 3 / 6 | 2 / 4 | 1 / 3 |
+| Brute HP | 2 | 3 | 4 |
+| Score multiplier | x0.5 | x1 | x2 |
+
+Each mode + difficulty keeps its own best score. All values live in `DIFFICULTY` in `www/js/game.js`.
+
+Enemies get faster and more numerous every wave:
 
 | Enemy | Appears | Behaviour |
 |---|---|---|
 | Crawler (red beetle) | Wave 1 | Chases your head |
-| Dasher (yellow arrow) | Wave 2 | Locks on, telegraphs, then charges |
-| Brute (purple hexagon) | Wave 4 | Slow, 3 HP, always drops a grenade |
+| Dasher (yellow arrow) | Wave 1-3 | Locks on, telegraphs, then charges |
+| Brute (purple hexagon) | Wave 3-6 | Slow, tough, always drops a grenade |
 
-Desktop browsers work too: Arrows/WASD to steer, Space to throw, P/Esc to pause.
+Desktop browsers work too: Arrows/WASD to steer, click to throw at the cursor (Space throws straight ahead), P/Esc to pause.
 
 ## Tech
 
